@@ -1,0 +1,803 @@
+---
+title: "STAT 6560 Final Project"
+author: "Kyoko Yamaguchi"
+date: "12/15/2021"
+output:
+  pdf_document:
+    toc: false
+  html_document:
+    theme: yeti
+    highlight: kate
+    toc: false
+    always_allow_html: yes
+  word_document:
+    toc: yes
+fontsize: 11pt
+always_allow_html: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction
+
+```{r, include=FALSE}
+library(MASS)   # load library MASS
+library(knitr)
+library(kableExtra)
+library(gt)
+```
+
+```{r, include=FALSE}
+# read data files --------------------------------
+data.7 <- read.csv("train.7.txt", header = F)
+data.7 <- as.matrix(data.7)
+dim(data.7)
+data.9 <- read.csv("train.9.txt", header = F)
+data.9 <- as.matrix(data.9)
+dim(data.9)
+```
+
+```{r, include=FALSE}
+# visualize the digit images ---------------------
+# note: each row corresponds to one observation or a digit
+ 
+# For example, pick the first observation of "7"
+i <- 1 
+
+# turn a 256 row vector into a 16x16 matrix 
+img <- matrix(as.vector(data.7[i,]), nrow = 16, ncol=16)
+
+# display the matrix in grayscale
+image(img[,16:1], col=gray((32:0)/32), axes=F)
+
+# "16:1" reverses the column order for proper display of the image.
+# grayscale "(32:0)/32" maps low pixel values to dark shades.
+```
+
+
+```{r, include=FALSE}
+# since we need to visualize vectors as images many times in this analysis,
+# define a function called "digit.image" which takes a 256 vector as input
+# and displays the corresponding 16x16 matrix as a grayscale image:
+
+digit.image <- function(x)
+               { img <- matrix(as.vector(x), nrow = 16, ncol=16) 
+               	 image(img[,16:1], col=gray((32:0)/32), axes=F)
+               	 box(col=3)
+               	}
+
+# try the new function!
+digit.image(data.7[i,])
+```
+
+For this data analysis project, we are given two files, "train.7.txt" and "train.9.txt", which contains 256 pixel vectors as columns and 600+ rows, each row representing one observation of an individual's handwritten "7" or a "9".
+
+```{r, include=F}
+# visualize the first five "7" and the first five "9" images
+par(mfrow=c(2,5), omi=rep(0,4), mar=rep(0.2,4), pty="s") # 2x5 display
+for (i in 1:5)
+{ digit.image(data.7[i,]) }
+for (i in 1:5)
+{ digit.image(data.9[i,]) }
+```
+
+The original matrix of "7"s (645 x 256) was split into a "training" set (400 x 256) and "testing" set (245 x 256). The original matrix of "9"s, (644 x 256) was also split into a training set (400 x 256) and testing set (244 x 256). The training sets from both groups were merged into a combined training set (800 x 245), and a combined testing set (489 x 256). A vector of class labels, which stores the ground truth for the row index being a "7" or a "9", were created for the combined training and testing sets, respectively.
+
+```{r, include=F}
+# split data into a training set and a test set --------------
+data.7.train <- data.7[1:400,]
+data.7.test <- data.7[401:645,]
+dim(data.7.test)
+
+data.9.train <- data.9[1:400,]
+data.9.test <- data.9[401:644,]
+
+# training data
+data.train <- rbind(data.7.train, data.9.train)
+dim(data.train)
+# [1] 800 256
+label.train <- c(rep(7,400), rep(9,400)) # class labels for training data
+
+# test data
+data.test <- rbind(data.7.test, data.9.test)
+dim(data.test)
+# [1] 489 256
+label.test <- c(rep(7,245), rep(9,244)) # class labels for test data
+```
+
+# Dimension reduction
+It is difficult to conceptualize a high-dimensional dataset with 256 variables. In this section, we will use the training sets exclusively to explore ways of reducing the dimensionality of these data. One common way to do this is with principal component analysis (PCA), which creates linear combinations, or "principal components" (PCs) of the original variables in such a way that maximizes the variance along the direction of the principal component.
+
+## PCA on "7"s
+```{r, include=F}
+# Carry out a PCA on training data of 400 "7"s in data.7.train
+pca7<-princomp(data.7.train)
+```
+
+
+```{r, include=F}
+# Visualize the synthetic digit images that you could generate along each of the PCA directions
+pca7_scores<-pca7[["scores"]]
+dim(pca7_scores)
+
+# coerce loadings into a dataframe
+dim(pca7$loadings)
+pca7_loadings <- pca7$loadings[,1:256] %>% as.data.frame()
+```
+
+
+```{r, include=F, out.width="50%", fig.align = 'center'}
+# "eigenimage"
+par(mfrow=c(1,3), omi=rep(0,4), mar=rep(0.2,4), pty="s") 
+digit.image(pca7_loadings[,1]) #Y1
+digit.image(pca7_loadings[,10]) #Y10
+digit.image(pca7_loadings[,100]) #Y100
+
+par(mfrow=c(1,1))
+title(main="\nSynthetic image of 7s created from PC loadings",cex.main=1.5)
+```
+
+We can create "synthetic digit images" that can be generated with $\overline{x} + ce$ where e represents the coefficients of the eigenvectors, and c is some constant. Here, I am plotting $\overline{x}$, i.e. c=0, which represents an average of 800 handwritten "7"s.
+
+
+```{r, echo=F, out.width="30%", fig.align = 'center'}
+# one image of "7"
+# digit.image(data.7.train[1,])
+
+# Visualize the average image of "7"s
+par(mfrow=c(1,1),  pty="s") 
+digit.image(colMeans(data.7.train))
+
+title(main="Figure 1. 'Average' image of 7, c=0", cex.main=2)
+```
+
+```{r, include=F, out.width="50%"}
+# for example, if I am looking at an appropriate c for e1, it should be sqrt(lambda 1)
+c_i <- pca7$sdev
+
+par(mfrow=c(1,4), omi=rep(0,4), mar=rep(0.2,4), pty="s")
+
+# original, c=0
+for (i in 1:4){
+digit.image(colMeans(data.7.train))
+}
+```
+
+
+I conceptualized "c" as the contours of the mean-centered ellipsoids, which have axes radiating outward in the direction of e and half lengths proportional to $\sqrt\lambda$. Therefore, I thought c should be values of $\sqrt\lambda_i$, where i is the index of the eigenvector. In the plot below, I am plotting the synthetic digit images where c takes on these values:
+
+```{r, echo=FALSE}
+rbind(c_i[1:4] , c_i[1:4]*-1) %>% kbl(caption="Values of c") %>% kable_styling(latex_options = "HOLD_position")
+```
+
+Since I have made "c" equal to $\sqrt\lambda$, which is equal to the standard deviation, we could consider images that are one, two, three (etc.) standard deviations away to visualize more "extreme" images. The images below represent "7"s that are one standard deviation away from the mean (i.e. c=$\sqrt\lambda_i$). The first row of images represents synthetic images of "7" that are PLUS one standard deviation away from the mean ($+\hat{\sigma}$), and the second row of images represents the same, but MINUS one standard deviation away from the mean ($-\hat{\sigma}$).
+
+
+```{r, echo=F, out.width="50%", fig.align = 'center'}
+par(mfrow=c(2,4), omi=rep(0,4), mar=rep(0.2,4), pty="s")
+
+# adding c
+for (i in 1:4){
+digit.image(colMeans(data.7.train) + pca7_loadings[,i]*c_i[i])
+}
+
+# going in the other direction
+for (i in 1:4){
+digit.image(colMeans(data.7.train) + pca7_loadings[,i]*-c_i[i])
+}
+par(mfrow=c(1,1))
+title(main="\nFigure 2. Synthetic image of 7s, c= +/-1SD", cex.main=1.5)
+```
+
+
+The plots below are images representing "7"s that are two standard deviations away from the mean (i.e. c=$2\sqrt\lambda_i$), with the first row of images being $\overline{x} + 2\hat{\sigma}e$, and the second row being $\overline{x} - 2\hat{\sigma}e$.
+
+
+```{r, echo=F, out.width="50%", fig.align = 'center'}
+par(mfrow=c(2,4), omi=rep(0,4), mar=rep(0.2,4), pty="s")
+
+# two standard deviations away
+for (i in 1:4){
+digit.image(colMeans(data.7.train) + pca7_loadings[,i]*2*c_i[i])
+}
+
+# going in the other direction
+for (i in 1:4){
+digit.image(colMeans(data.7.train) + pca7_loadings[,i]*2*-c_i[i])
+}
+par(mfrow=c(1,1))
+title(main="\nFigure 3. Synthetic image of 7s, c= +/-2SD", cex.main=1.5)
+```
+
+Based on the above images, we can describe the nature of the variations that the first 4 PCs capture. PC1, corresponding to the leftmost images, appears to capture variation in the width of the "7". PC2, second from left, appears to capture variation in the presence or absence of the "overhang" of the "7". PC3, second from right, appears to capture variation in the height of the "7", presumably based on whether there is pixel data at or below the top edge. PC4, rightmost, appears to capture variation in the shape of the "7", i.e. how sharp the angle on the "7" is.
+
+
+```{r, include=FALSE}
+# Using PC1 and 2, identify and display typical images of "7" and atypical images among the observed images
+# in other words, identify outliers of PC1 and 2
+# starting with PC1:
+summary(pca7_scores[,1]) 
+```
+
+```{r, include=F}
+# an atypical image of 7 would occur at the minimum or maximum values (far away from the mean)
+w_min<-which.min(pca7_scores[,1]) #index for the minimum score
+w_max<-which.max(pca7_scores[,1]) #index for the maximum score
+w_mean<-which(round(pca7_scores[,1],0)==0)[5] #index for mean score, chosen random one
+w_med<-which(round(pca7_scores[,1],3)==-0.338) #index for median score
+```
+
+By identifying which indexes correspond to extreme versus mid-range values of PCA scores, we can display the images at these indexes to exemplify "atypical" (minimum, maximum) or "typical" (mean, median) images of "7". Here, I am plotting atypical images of 7s corresponding to the minimum PC1 score (left), and the maximum PC1 score (right). We see that indeed, PC1 appears to capture variation in the width of the "7".
+
+
+```{r, echo=F, out.width="30%", fig.align = 'center'}
+par(mfrow=c(1,2), omi=rep(0,4), mar=rep(0.2,4), pty="s")
+
+# visualize the "weird" ones
+digit.image(data.7[w_min,]) #min
+digit.image(data.7[w_max,]) #max
+par(mfrow=c(1,1))
+title(main="\nFigure 4. Atypical image of 7s (PC1)", cex.main=2)
+```
+
+In this figure below, I am plotting typical images of "7"s corresponding to the mean (left) and median (right) PC1 scores. We see that the width of the "7" is neither too thin or too wide.
+
+
+```{r, echo=F, out.width="30%", fig.align = 'center'}
+par(mfrow=c(1,2), omi=rep(0,4), mar=rep(0.2,4), pty="s")
+# versus a "normal" one
+digit.image(data.7[w_mean,]) #mean
+digit.image(data.7[w_med,]) #median
+par(mfrow=c(1,1))
+title(main="\nFigure 5. Typical image of 7s (PC1)", cex.main=2)
+```
+
+```{r, include=F}
+rm(w_min, w_max, w_mean, w_med)
+```
+
+
+```{r, include=F}
+# same for PC2:
+summary(pca7_scores[,2])
+```
+
+```{r, include=F}
+# an atypical image of 7 would occur at the minimum or maximum values (far away from the mean)
+w_min<-which.min(pca7_scores[,2]) #index for the minimum score
+w_max<-which.max(pca7_scores[,2]) #index for the maximum score
+w_mean<-which(round(pca7_scores[,2],0)==0)[5] #index for mean score
+w_med<-which(round(pca7_scores[,2],2)==-0.29) #index for median score
+```
+
+We will repeat the same analysis for PC2. In this figure below, I am plotting atypical images of "7"s, showing the images corresponding to the minimum (left) and the maximum (right) PC2 scores.
+
+
+```{r, echo=F, out.width="30%", fig.align = 'center'}
+par(mfrow=c(1,2), omi=rep(0,4), mar=rep(0.2,4), pty="s")
+
+# visualize the "weird" ones
+digit.image(data.7[w_min,])
+digit.image(data.7[w_max,])
+
+par(mfrow=c(1,1))
+title(main="\nFigure 6. Atypical image of 7s (PC2)", cex.main=2)
+```
+
+
+Below are the "typical" images (left: mean, right: median) as defined by PC2. These images are similar, in that there is a small gap at the top left corner near the start of the "7". Going back to the "atypical" images, we see that there is a large gap in the beginning of the "7" for the image corresponding to the lowest PC2 value, and a very dark spot adjacent to the top edge of the square drawing space for the image corresponding to the maximum PC2 value. This indicates that PC2 is likely capturing variation in the "starting stroke" of the "7".
+
+
+```{r, echo=F, out.width="30%", fig.align = 'center'}
+par(mfrow=c(1,2), omi=rep(0,4), mar=rep(0.2,4), pty="s")
+
+# versus a "normal" one
+digit.image(data.7[w_mean,]) #mean
+digit.image(data.7[w_med,]) #median
+
+par(mfrow=c(1,1))
+title(main="\nFigure 7. Typical image of 7s (PC2)", cex.main=2)
+```
+
+We can determine the number of appropriate components to represent the 256-dimensional data with a scree plot. An "elbow" appears between values 0 and 50, closer to 0. When zooming in on just the first 20 principal components (Supplementary figure 1), seems there is a sharp drop in the proportion of variance explained by the principal component at PC5 onwards. We also see that increase in the cumulative proportion of variance explained (Supplementary table 1) becomes much smaller past PC5. Therefore, I support using the first 4 PCs to explain these data.
+
+```{r, echo=F, out.width="50%", fig.align = 'center'}
+# How many components might be adequate to represent the 256 dimensional data?
+# scree plot
+scree7<-pca7$sdev^2 / sum(pca7$sdev^2)
+plot( scree7 , ylab="Proportion of variance explained", main="Figure 8. Scree plot from PCA on 7s data")
+```
+
+
+
+```{r, include=F, out.width="50%", fig.align = 'center'}
+# scree plot
+plot( scree7[1:20] , ylab="Proportion of variance explained", main="Scree plot from PCA on 7s data, \nfirst 20 components")
+```
+
+
+
+```{r, include=F}
+# View the cumulative proportion of variance explained
+# summary(pca7)
+
+# Manually create a truncated summary table
+pca7_summ<-data.frame(Standard_deviation=pca7$sdev, Proportion_of_variance=pca7$sdev^2/sum(pca7$sdev^2),
+           Cumulative_proportion=cumsum(pca7$sdev^2/sum(pca7$sdev^2)))
+
+pca7_summ[1:20,] %>% kbl(caption="Summary of first 20 components from 7s data") %>% kable_styling(latex_options = "HOLD_position")
+```
+
+## PCA on "9"s
+
+```{r, include=F}
+# Carry out a PCA on training data of 400 "7"s in data.7.train
+pca9<-princomp(data.9.train)
+```
+
+
+```{r, include=F}
+# Visualize the synthetic digit images that you could generate along each of the PCA directions
+pca9_scores<-pca9[["scores"]]
+dim(pca9_scores)
+
+# coerce loadings into a dataframe
+dim(pca9$loadings)
+pca9_loadings <- pca9$loadings[,1:256] %>% as.data.frame()
+```
+
+
+After performing PCA on the training data of "9"s, we will again create "synthetic digit images" that can be generated with $\overline{x} + ce$ where e represents the coefficients of the eigenvectors, and c is some constant. Here, I am plotting $\overline{x}$, i.e. c=0.
+
+
+```{r, echo=F, out.width="30%", fig.align = 'center'}
+# for example, if I am looking at an appropriate c for e1, it should be sqrt(lambda 1)
+c_i <- pca9$sdev
+
+par(mfrow=c(1,1),pty="s")
+
+# original, c=0
+# for (i in 1:4){
+# digit.image(colMeans(data.9.train))
+# }
+
+digit.image(colMeans(data.9.train))
+            
+title(main="Figure 9. 'Average'\n image of 9, c=0", cex.main=2)
+```
+
+
+Here, I am plotting c=($\overline{x}+\hat{\sigma}e$) (top row), and c=($\overline{x}-\hat{\sigma}e$) (bottom row).
+
+
+```{r, echo=F, out.width="50%", fig.align = 'center'}
+par(mfrow=c(2,4), omi=rep(0,4), mar=rep(0.2,4), pty="s")
+
+# adding c
+for (i in 1:4){
+digit.image(colMeans(data.9.train) + pca9_loadings[,i]*c_i[i])
+}
+
+# going in the other direction
+for (i in 1:4){
+digit.image(colMeans(data.9.train) + pca9_loadings[,i]*-c_i[i])
+}
+
+par(mfrow=c(1,1))
+title(main="\nFigure 10. Synthetic image of 9s, c=+/-1SD", cex.main=1.5)
+```
+
+Again, we can also consider images that are several standard deviations away, for more "extreme" images. The first row of images represents synthetic images of "9" that are PLUS two standard deviations away from the mean ($\overline{x}+2\hat{\sigma}e$), and the second row of images represents the same, but MINUS two standard deviations away from the mean ($\overline{x}-2\hat{\sigma}e$).
+
+
+```{r, echo=F, out.width="50%", fig.align = 'center'}
+par(mfrow=c(2,4), omi=rep(0,4), mar=rep(0.2,4), pty="s")
+
+# two standard deviations away
+for (i in 1:4){
+digit.image(colMeans(data.9.train) + pca9_loadings[,i]*2*c_i[i])
+}
+
+# going in the other direction
+for (i in 1:4){
+digit.image(colMeans(data.9.train) + pca9_loadings[,i]*2*-c_i[i])
+}
+
+par(mfrow=c(1,1))
+title(main="\nFigure 11. Synthetic image of 9s, c= +/-2SD", cex.main=1.5)
+```
+
+Based on the above images, we can describe the nature of the variations that the first 4 PCs capture. PC1, corresponding to the leftmost images, appears to capture variation in the width of the circular part of the "9". PC2, second from left, appears to capture variation in the absence of presence of pixels on the top left corner of the drawing space. PC3, second from right, appears to capture variation in the length of the "tail" of the "9", but it is a bit blurry, so I am not sure. PC4, rightmost, appears blurry as well, but it may be capturing variation in the width of the circular part of the "9".
+```{r, include=FALSE}
+# Using PC1 and 2, identify and display typical images of "9" and atypical images among the observed images
+# in other words, identify outliers of PC1 and 2
+# starting with PC1:
+summary(pca9_scores[,1]) 
+```
+
+```{r, include=F}
+# an atypical image of 9 would occur at the minimum or maximum values (far away from the mean)
+w_min<-which.min(pca9_scores[,1]) #index for the minimum score
+w_max<-which.max(pca9_scores[,1]) #index for the maximum score
+w_mean<-which(round(pca9_scores[,1],0)==0)[5] #index for mean score, chosen random one
+w_med<-which(round(pca9_scores[,1],2)==0.7) #index for median score
+```
+
+In this figure below, I am plotting atypical images of "9"s as defined by PC1 scores (minimum, left; maximum, right). A prominent difference between these two drawings is the presence versus absence of the "loop" of the "9" extending deep into the middle of the drawing space.
+
+
+```{r, echo=F, out.width="30%", fig.align = 'center'}
+par(mfrow=c(1,2), omi=rep(0,4), mar=rep(0.2,4), pty="s")
+
+# visualize the "weird" ones
+digit.image(data.9[w_min,]) #min
+digit.image(data.9[w_max,]) #max
+par(mfrow=c(1,1))
+title(main="\nFigure 12. Atypical image of 9s (PC1)", cex.main=2)
+```
+
+In this figure below, I am plotting typical images of "9"s as defined by PC1 (mean,left; median, right). Both are relatively similar in the amount of the "loop" that hangs into the middle part of the drawing space.
+
+
+```{r, echo=F, out.width="30%", fig.align = 'center'}
+par(mfrow=c(1,2), omi=rep(0,4), mar=rep(0.2,4), pty="s")
+# versus a "normal" one
+digit.image(data.9[w_mean,]) #mean
+digit.image(data.9[w_med,]) #median
+par(mfrow=c(1,1))
+title(main="\nFigure 13. Typical image of 9s (PC1)", cex.main=2)
+```
+
+```{r, include=F}
+rm(w_min, w_max, w_mean, w_med)
+```
+
+
+```{r, include=F}
+# same for PC2:
+summary(pca9_scores[,2])
+```
+
+```{r, include=F}
+# an atypical image of 9 would occur at the minimum or maximum values (far away from the mean)
+w_min<-which.min(pca9_scores[,2]) #index for the minimum score
+w_max<-which.max(pca9_scores[,2]) #index for the maximum score
+w_mean<-which(round(pca9_scores[,2],0)==0)[5] #index for mean score
+w_med<-which(round(pca9_scores[,2],2)==-0.55)[2] #index for median score
+```
+
+We will repeat the same analysis for PC2. In this figure below, I am plotting atypical images of "9"s as defined by PC2 (left, minimum; right, maximum). Earlier, we hypothesized that PC2 is capturing variation in terms of pixel presence/absence in the top left corner of the drawing space, and it seems to be the case, as there is a wide gap for the lefthand figure and a tighter gap for the righthand figure. Another thing PC2 may be capturing is the presence/absence of pixels in the part of the "9" that connects the loop to the line: there is a sparsity in the lefthand figure, versus a density in the righthand figure.
+
+
+```{r, echo=F, out.width="30%", fig.align = 'center'}
+par(mfrow=c(1,2), omi=rep(0,4), mar=rep(0.2,4), pty="s")
+
+# visualize the "weird" ones
+digit.image(data.9[w_min,])
+digit.image(data.9[w_max,])
+
+par(mfrow=c(1,1))
+title(main="\nFigure 14. Atypical image of 9s (PC2)", cex.main=2)
+```
+
+
+In this figure below, I am plotting typical images of "9"s as defined by PC2 (mean,left; median, right). These images both have similar pixel densities at the top left corners, and have similar pixel density at the connection of the "loop" to the line of the "9", supporting our earlier observations.
+
+
+```{r, echo=F, out.width="30%", fig.align = 'center'}
+par(mfrow=c(1,2), omi=rep(0,4), mar=rep(0.2,4), pty="s")
+
+# versus a "normal" one
+digit.image(data.9[w_mean,]) #mean
+digit.image(data.9[w_med,]) #median
+
+par(mfrow=c(1,1))
+title(main="\nFigure 15. Typical image of 9s (PC2)", cex.main=2)
+```
+
+We can determine the number of appropriate components to represent the 256-dimensional data with a scree plot. Considering the cumulative proportion of variance explained for the first 20 components (Supplementary table 2), we see that in order to explain about 50% of the data, we can use 4 components. When zooming in on just the first 20 PCs (Supplementary figure 2), unlike before, there is no sharp drop in the proportion of variance explained. Therefore, we could consider a greater number of components, such as 10, which would capture 70% of the variance in the original data.
+
+```{r, echo=F, out.width="50%", fig.align = 'center'}
+# How many components might be adequate to represent the 256 dimensional data?
+# scree plot
+
+scree9<-pca9$sdev^2 / sum(pca9$sdev^2)
+
+plot( scree9 , ylab="Proportion of variance explained", main="Figure 16. Scree plot of PCA on 9s data")
+```
+
+
+
+```{r, include=F, out.width="50%", fig.align = 'center'}
+# scree plot
+plot( scree9[1:20] , ylab="Proportion of variance explained", main="Scree plot of PCA on 9s data,\nfirst 20 components")
+```
+
+```{r, include=F}
+# View the cumulative proportion of variance explained
+# summary(pca9)
+
+# Manually create a truncated summary table
+pca9_summ<-data.frame(Standard_deviation=pca9$sdev, Proportion_of_variance=pca9$sdev^2/sum(pca9$sdev^2),
+           Cumulative_proportion=cumsum(pca9$sdev^2/sum(pca9$sdev^2)))
+
+pca9_summ[1:20,] %>% kbl(caption="Summary of first 20 components from 9s data") %>% kable_styling(latex_options = "HOLD_position")
+```
+
+## PCA on combined "7" and "9" data
+```{r, include=F}
+# Carry out a PCA on the combined training data of 400 "7" and 400 "9" in data.train
+pca79<-princomp(data.train)
+```
+
+Here, I performing a PCA for the combined training data of 400 "7"s and 400 "9"s. The distribution of coefficients of the eigenvectors shows that PC1 has more of a right skew than PC2 which has a left skew, meaning more positive coefficients define the direction of PC1 while more negative coefficients define the direction of PC2.
+
+```{r, echo=FALSE, out.width="50%", fig.align = 'center'}
+# Define the first two PCs
+pca79_scores<-pca79$scores
+# plot(x=pca79_scores[,1], pca79_scores[,2])
+pca79_loadings12<-pca79$loadings[,1:2] %>% as.data.frame()
+
+par(mfrow=c(1:2))
+hist(pca79_loadings12$Comp.1, 50, main="Figure 17a. Distribution of eigenvector \ncoefficients for PC1", xlab="")
+hist(pca79_loadings12$Comp.2, 50, main="17b. Distribution of eigenvector \ncoefficients for PC2", xlab="")
+```
+
+
+Here, I am plotting the mean-centered PC scores for PC1 and 2, colored by its class label. There is some overlap between the two groups, which is to be expected when the shape of a "7" and a "9" look quite similar. It appears that although a classification strategy that would perfectly separate these two groups may not exist, it appears that there is some separation between these two groups, especially along the PC2 axis.
+
+```{r, include=FALSE}
+# Generate a plot of mean-centered PC scores using the first two PCs and label each point as the corresponding digit (1 or 2?)
+# Just verify that it's "mean centered" as it is
+pca79$scores[1:5]
+(( data.train[1,] - pca79$center )%*% pca79$loadings )[1:5]
+```
+
+```{r, echo=F, out.width="50%", fig.align = 'center'}
+# plot itself
+# labels: row index 1:400 is "7" 401:800 is "
+mycolors<-ifelse(label.train==7, "red", "blue")
+
+plot(x=pca79_scores[,1], pca79_scores[,2],col=mycolors, pch=19, cex=1.2, 
+     main="Figure 18. Mean-centered PC scores", xlab="PC1", ylab="PC2")
+legend(x="bottomleft", legend=c("7", "9"),fill=c("red", "blue"))
+```
+
+
+# Classification
+## Performing Fisher's LDA on original data
+
+```{r, include=FALSE}
+# LDA  -----------------------
+col.sd <- apply(data.train, 2, sd)  # compute columnwise standard deviation
+sum(col.sd==0)   # 18 variables with zero SD!
+
+summary(col.sd)
+
+# values that are ALMOST equal to zero (anything from 0.01 to 0.04)
+# table( round(col.sd, 1)==0 )
+
+# subset on variables with sd >0
+# sdzero<-which(col.sd==0)
+# data.train_sub<-data.train[,! (colnames(data.train) %in% names(sdzero))]
+```
+
+This plot of the columnwise means vs. the standard deviations of the combined training dataset will allow us to determine an appropriate cutoff for filtering out variables with low variation, the idea being that variables with a low standard deviation (i.e. low variation) will be less useful in helping us discriminate between "7"s and "9"s. There is a dense cluster with near-zero standard deviation values, which can be cropped off if we filter for only values that have a standard deviation greater than 0.1 (red line). After applying this filter, we have filtered 256 variables down to 209 variables.
+
+```{r, echo=F, out.width="50%", fig.align = 'center'}
+# Is there some more stringent cutoff we could use for sd?
+
+# plot(x=colMeans(data.train), y=col.sd)
+smoothScatter(x=colMeans(data.train), y=col.sd, 
+              xlab="Mean", ylab="Standard deviation",
+              main="Figure 19. Mean vs. standard deviation")
+abline(h=0.1, col=2)
+```
+
+After performing linear discriminant analysis (LDA), we are left with the linear discriminant (LD) scores, which appears as a vector the same length as that of the number of indexes for the data we fed into the training.
+
+
+```{r, include=F}
+idx_sdcutoff <- (1:256)[col.sd>0.1]  # this contains the indices of variables with SD > cutoff
+data.train[,idx_sdcutoff] %>% dim()
+label.train.factor<-as.factor(label.train) #convert into factors just incase
+
+
+lda79 <- lda(x=data.train[,idx_sdcutoff], grouping=label.train.factor) # lda(x, grouping)
+
+LD1 <- rep(0,256) #the variables we filtered out are filled with "0"s
+LD1[idx_sdcutoff] <- lda79$scaling   # linear discriminant coefficients as a 256 dim vector
+```
+
+The plot below shows an image of the absolute values of the LD coefficients. It appears that the greatest discrimination between the images of "7"s and "9"s occur at the right bottom "tail" part of the 7 or 9, followed by some variation  around the left middle part of the 7 or 9. This makes sense, as the shape of the "tail" end of the 7 or 9 could differ, as 7s have a straight diagonal tail while 9s could be curved. Similarly, the lefthand middle section of the 9 curves inward, while there is usually an absence of dark pixels for the 7.
+
+
+```{r, echo=F, out.width="30%", fig.align = 'center'}
+par(pty="s")
+# digit.image(LD1) # visualize the raw LD coefficients
+digit.image(abs(LD1)) # visualize the absolute values of the LD coefficients
+
+par(mfrow=c(1,1))
+title(main="Figure 20. Synthetic image of \nabs. val of LD coefficients", cex.main=2)
+```
+
+
+Mathematically, the coefficients for PCA is the  eigenvectors of  $\Sigma$ and the coefficients for the LDA is the coefficients of the eigenvectors of $\Sigma^{-1}B_\mu$. Therefore, it is expected that these two are different from each other. These are also conceptually different, as PCA's goal is to reduce dimensions in a way that maximizes variance; the goal of LDA is to maximize the separation between two populations which incidentally leads to dimensional reduction. As shown here, there is no relationship between the coefficients from PCA and the coefficients from LDA because they are computing the eigenvectors from two different matrices:
+
+
+```{r, echo=F, out.width="50%", fig.align = 'center'}
+plot(pca79_loadings12$Comp.1[idx_sdcutoff], LD1[idx_sdcutoff], 
+     xlab="PC1 scores", ylab="LD scores",
+     main="Figure 21. PC1 vs LD scores")
+# hist(LD1[idx_sdcutoff], breaks=50)
+```
+
+Here, we are evaluating the LD rule in terms of three types of error rates: (1) the apparent error rate, (2) the leave-one-out (LOO) cross validation (CV) error rate, and (3) the test error rate. The apparent error rate is the proportion of observations in the training set that are misclassified by the linear discriminant rule:
+
+```{r, include=FALSE}
+lda79_pred<-stats::predict(lda79, newdata=data.train[,idx_sdcutoff])
+
+# table(label.train.factor)
+# table(lda79_pred$class)
+confusion79<-rbind( table(lda79_pred$class[label.train.factor=="7"]),
+       table(lda79_pred$class[label.train.factor=="9"]) )
+rownames(confusion79)<-c("Actual 7","Actual 9")
+colnames(confusion79)<-c("Predicted 7","Predicted 9")
+confusion79%>% kbl(caption="Confusion matrix for APER")  %>% kable_styling(latex_options = "HOLD_position", font_size = 10)
+```
+
+```{r, include=FALSE}
+# sum of misclassifications / sum of total number of predictions
+aper_rate<-(confusion79[1,2]+confusion79[2,1])/sum(confusion79)
+```
+
+The apparent error rate can be computed by $\Sigma_{misclassifications} / \Sigma_{number of predictions}$ from the confusion matrix (Supplementary table 3), which evaluates to 0.5%.
+
+The leave-one-out error rate is the error-rate for the iterative form of cross validation, in which one observation is "held out" during the n rounds of cross validation and used as the testing data. The number of misclassified samples is 45, and the LOOCV error rate (32/800) evaluates to 4.0%(Supplementary table 4). *Note, a seed was set prior to running this code chunk.
+
+```{r, include=F}
+set.seed(123)
+lda79_loo<-lda(x=data.train[,idx_sdcutoff],grouping=label.train.factor, CV=T)
+# lda79_loo$class
+confusion79_loo<-rbind( table(lda79_loo$class[label.train.factor=="7"]),
+       table(lda79_loo$class[label.train.factor=="9"]) )
+rownames(confusion79_loo)<-c("Actual 7","Actual 9")
+colnames(confusion79_loo)<-c("Predicted 7","Predicted 9")
+confusion79_loo%>% kbl(caption="Confusion matrix for LOO CV") %>% kable_styling(latex_options = "HOLD_position", font_size = 10)
+```
+
+
+```{r, include=F}
+sum(label.train!=lda79_loo$class)
+loo_rate<-mean(label.train!=lda79_loo$class)
+```
+
+For the test error rate, we will use the predict() function to feed a brand new dataset (i.e. the combined testing data) into the LD rule we created using the training data and count the number of misclassified observations. The number of misclassified samples using a testing dataset is (157 + 2) / 489, or 32.51% (Supplementary table 5). When using a different dataset than what was used to train the data to predict the classes, we are left with a misclassification error rate that is comparatively larger than the apparent error rate and LOOCV error rate, which is somewhat to be expected since both of these were computed from the training data. However, it is not ideal, as a completely random classification rule for 2 classes will have a 50% error rate.
+
+```{r, include=F}
+# first I gotta use the testing data to predict
+lda79_test_pred<-stats::predict(lda79, newdata=data.test[,idx_sdcutoff])
+
+# label.train.factor<-as.factor(label.train)
+# table(label.train.factor)
+# table(lda79_pred$class)
+confusion79_test<-rbind( table(lda79_test_pred$class[label.train.factor=="7"]),
+       table(lda79_test_pred$class[label.train.factor=="9"]) )
+rownames(confusion79_test)<-c("Actual 7","Actual 9")
+colnames(confusion79_test)<-c("Predicted 7","Predicted 9")
+confusion79_test%>% kbl(caption="Confusion matrix for testing")  %>% kable_styling(latex_options = "HOLD_position", font_size = 10)
+```
+
+
+```{r, include=F}
+# sum of misclassifications / sum of total number of predictions
+test_rate<-(confusion79_test[1,2]+confusion79_test[2,1])/sum(confusion79_test)
+```
+
+
+## Performing Fisher's LDA using PC1 and 2 scores as predictors
+
+Since we saw in an earlier figure that the plot of PC1 vs. PC2 could potentially be useful in defining a classification rule, we will be exploring that assumption here by performing Fisher's LDA on PC1 and PC2 scores as predictor variables.
+
+```{r, include=F}
+pca79_scores12<-as.data.frame(pca79_scores[,1:2])
+
+# lda79_pc<-lda(label.train ~ Comp.1+Comp.2, data=pca79_scores12)
+
+lda79_pc<-lda(x=pca79_scores12, grouping=label.train.factor, data=pca79_scores12)
+
+lda79_pc
+```
+
+```{r, include=F}
+# apparent error rate
+lda79_pc_pred<-stats::predict(lda79_pc, newdata=pca79_scores12)
+# lda79_pc_pred$class
+confusion79_pc<-rbind( table(lda79_pc_pred$class[label.train.factor=="7"]),
+       table(lda79_pc_pred$class[label.train.factor=="9"]) )
+rownames(confusion79_pc)<-c("Actual 7","Actual 9")
+colnames(confusion79_pc)<-c("Predicted 7","Predicted 9")
+confusion79_pc%>% kbl(caption="Confusion matrix for APER") %>% kable_styling(latex_options = "HOLD_position", font_size = 10)
+```
+
+```{r, include=F}
+# sum of misclassifications / sum of total number of predictions
+pc_aper_rate<-(confusion79_pc[1,2]+confusion79_pc[2,1])/sum(confusion79_pc)
+```
+
+The apparent error rate is (80 + 48) / 800, or 16% (Supplementary table 6), and the LOO CV error rate is also 16% (Supplementary table 7).
+
+```{r, include=F}
+# LOO error rate
+set.seed(123)
+lda79_pc_loo<-lda(x=pca79_scores12, grouping=label.train.factor, CV=T)
+# lda79_pc_loo$class
+confusion79_pc_loo<-rbind( table(lda79_pc_loo$class[label.train.factor=="7"]),
+       table(lda79_pc_loo$class[label.train.factor=="9"]) )
+rownames(confusion79_pc_loo)<-c("Actual 7","Actual 9")
+colnames(confusion79_pc_loo)<-c("Predicted 7","Predicted 9")
+confusion79_pc_loo %>% kbl(caption="Confusion matrix for LOOCV")  %>% kable_styling(latex_options = "HOLD_position", font_size = 10)
+```
+
+```{r, include=F}
+sum(label.train!=lda79_pc_loo$class)
+pc_loo_rate<-mean(label.train!=lda79_pc_loo$class)
+```
+
+For computing the test error rate, we will use predict() on a PCA object that we created from the combined training data to compute PCA scores for the testing set. Then, we will use predict() to feed in these PCA scores from the testing set into the LD rule. The LD rule does not seem to do a very good job discriminating between the "7"s and "9"s, as it gives a relatively high misclassification error rate of 41.92% (Supplementary table 8). The addition of principal components as predictors does not seem to improve classification.
+
+```{r, include=F}
+testpcascores<-stats::predict(pca79, newdata = data.test)
+testpcascores12<-as.data.frame(testpcascores[,1:2])
+
+# test error rate
+# first I gotta use the testing data to predict
+lda79_pc_pred<-stats::predict(lda79_pc, newdata=testpcascores12)
+```
+
+
+```{r, include=F}
+# label.train.factor<-as.factor(label.train)
+# table(label.train.factor)
+# table(lda79_pred$class)
+confusion79_pc_test<-rbind( table(lda79_pc_pred$class[label.train.factor=="7"]),
+       table(lda79_pc_pred$class[label.train.factor=="9"]) )
+rownames(confusion79_pc_test)<-c("Actual 7","Actual 9")
+colnames(confusion79_pc_test)<-c("Predicted 7","Predicted 9")
+confusion79_pc_test %>% kbl(caption="Confusion matrix for testing")  %>% kable_styling(latex_options = "HOLD_position", font_size = 10)
+```
+
+
+```{r, include=F}
+# sum of misclassifications / sum of total number of predictions
+pc_test_rate<-(confusion79_pc_test[1,2]+confusion79_pc_test[2,1])/sum(confusion79_pc_test)
+```
+
+
+Below is a summary table of the misclassification error rates we have computed so far:
+```{r, echo=F}
+yee<-cbind(aper_rate, loo_rate,  round(test_rate,3)) 
+haw<-cbind(pc_aper_rate, pc_loo_rate, round(pc_test_rate, 3))
+
+yeehaw<-rbind(yee, haw)
+
+colnames(yeehaw)<-c("Apparent error", "LOO CV error", "Test error")
+rownames(yeehaw)<-c("LDA on orig. variables", "LDA on PC1&2 scores")
+yeehaw %>% kbl(caption="Summary of error rates")  %>% kable_styling(latex_options = "HOLD_position", font_size =10)
+```
+
+
+# Additional analysis/discussion
+
+Some limitations of the analysis occurs due to the fact that our data has 256 dimensions representing one pixel out of a 16x16 square, and there is no practical way to conceptualize the original data, unlike the iris data in which we can plot the variables directly (ex. "Sepal width" vs "Sepal length"). This is why we had to use dimensional reduction such as we did in part 1 of this project, but we are limited in that these data do not neatly collapse into a few PCs that we are able to plot on a two-dimensional scale.
+
+A surprising observation is that the LD rule based on PCs 1 and 2 was worse at classifying the "7"s and "9"s than the LD rule based on the original data. This may be due to the fact that PC 1 and 2 only cumulatively explain 33% of the variance (Supplementary table 9), which may not have contained enough information from which we could create a good classification rule. I tried plotting a 3D plot for PC1, PC2, and PC3 to see if it would improve the visual separation between the "7" and "9" groups, but it was unhelpful (figure not shown, code available). However, even if visualizing more than 3 components is impossible, it may be worthwhile to explore feeding in more variables into the LD classifier, maybe up to PC10 or PC20. Another method to improve the classifier may be to consider quadratic discriminant analysis (QDA), as a quadratic curve may be able to better divide the two groups than a straight line. In conclusion, it appears that PCA is good for us to be able to visualize these data in a lower dimension, but that using more variables may be helpful in determining a good classification strategy.
+
+```{r, include=FALSE, eval=FALSE}
+# code for plotting a 3D plot
+rgl::plot3d(x=pca79_scores[,1], y=pca79_scores[,2], z= pca79_scores[,3], col=label.train.factor,
+       type = 's', radius = 0.5,
+       xlab="PC 1", ylab="PC 2", zlab="PC 3")
+```

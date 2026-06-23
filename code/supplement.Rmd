@@ -1,0 +1,793 @@
+---
+title: "STAT 6560 Final Project Supplementary Tables"
+author: "Kyoko Yamaguchi"
+date: "12/15/2021"
+output:
+  pdf_document:
+    toc: no
+  html_document:
+    theme: yeti
+    highlight: kate
+    toc: yes
+    always_allow_html: yes
+  word_document:
+    toc: yes
+always_allow_html: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r, include=FALSE}
+library(MASS)   # load library MASS
+library(knitr)
+library(kableExtra)
+library(gt)
+```
+
+```{r, include=FALSE}
+# read data files --------------------------------
+data.7 <- read.csv("train.7.txt", header = F)
+data.7 <- as.matrix(data.7)
+dim(data.7)
+data.9 <- read.csv("train.9.txt", header = F)
+data.9 <- as.matrix(data.9)
+dim(data.9)
+```
+
+```{r, include=FALSE}
+# visualize the digit images ---------------------
+# note: each row corresponds to one observation or a digit
+ 
+# For example, pick the first observation of "7"
+i <- 1 
+
+# turn a 256 row vector into a 16x16 matrix 
+img <- matrix(as.vector(data.7[i,]), nrow = 16, ncol=16)
+
+# display the matrix in grayscale
+image(img[,16:1], col=gray((32:0)/32), axes=F)
+
+# "16:1" reverses the column order for proper display of the image.
+# grayscale "(32:0)/32" maps low pixel values to dark shades.
+```
+
+
+```{r, include=FALSE}
+# since we need to visualize vectors as images many times in this analysis,
+# define a function called "digit.image" which takes a 256 vector as input
+# and displays the corresponding 16x16 matrix as a grayscale image:
+
+digit.image <- function(x)
+               { img <- matrix(as.vector(x), nrow = 16, ncol=16) 
+               	 image(img[,16:1], col=gray((32:0)/32), axes=F)
+               	 box(col=3)
+               	}
+
+# try the new function!
+digit.image(data.7[i,])
+```
+
+
+
+```{r, include=F}
+# visualize the first five "7" and the first five "9" images
+par(mfrow=c(2,5), omi=rep(0,4), mar=rep(0.2,4), pty="s") # 2x5 display
+for (i in 1:5)
+{ digit.image(data.7[i,]) }
+for (i in 1:5)
+{ digit.image(data.9[i,]) }
+```
+
+```{r, include=F}
+# split data into a training set and a test set --------------
+data.7.train <- data.7[1:400,]
+data.7.test <- data.7[401:645,]
+dim(data.7.test)
+
+data.9.train <- data.9[1:400,]
+data.9.test <- data.9[401:644,]
+
+# training data
+data.train <- rbind(data.7.train, data.9.train)
+dim(data.train)
+# [1] 800 256
+label.train <- c(rep(7,400), rep(9,400)) # class labels for training data
+
+# test data
+data.test <- rbind(data.7.test, data.9.test)
+dim(data.test)
+# [1] 489 256
+label.test <- c(rep(7,245), rep(9,244)) # class labels for test data
+```
+
+
+```{r, include=F}
+# Carry out a PCA on training data of 400 "7"s in data.7.train
+pca7<-princomp(data.7.train)
+```
+
+
+
+
+```{r, include=F}
+# Visualize the synthetic digit images that you could generate along each of the PCA directions
+pca7_scores<-pca7[["scores"]]
+dim(pca7_scores)
+
+# coerce loadings into a dataframe
+dim(pca7$loadings)
+pca7_loadings <- pca7$loadings[,1:256] %>% as.data.frame()
+```
+
+
+
+
+```{r, include=FALSE, out.width="50%", fig.align = 'center'}
+# "eigenimage"
+par(mfrow=c(1,3), omi=rep(0,4), mar=rep(0.2,4), pty="s") 
+digit.image(pca7_loadings[,1]) #Y1
+digit.image(pca7_loadings[,10]) #Y10
+digit.image(pca7_loadings[,100]) #Y100
+
+par(mfrow=c(1,1))
+title(main="\nSynthetic image of 7s created from PC loadings",cex.main=1.5)
+```
+
+
+
+```{r, include=FALSE, out.width="30%", fig.align = 'center'}
+# one image of "7"
+# digit.image(data.7.train[1,])
+
+# Visualize the average image of "7"s
+par(mfrow=c(1,1),  pty="s") 
+digit.image(colMeans(data.7.train))
+
+title(main="'Average' image of 7, c=0", cex.main=2)
+```
+
+```{r, include=F, out.width="50%"}
+# for example, if I am looking at an appropriate c for e1, it should be sqrt(lambda 1)
+c_i <- pca7$sdev
+
+par(mfrow=c(1,4), omi=rep(0,4), mar=rep(0.2,4), pty="s")
+
+# original, c=0
+for (i in 1:4){
+digit.image(colMeans(data.7.train))
+}
+```
+
+
+
+
+```{r, include=FALSE, out.width="50%", fig.align = 'center'}
+par(mfrow=c(1,4), omi=rep(0,4), mar=rep(0.2,4), pty="s")
+
+# original, c=0
+for (i in 1:4){
+digit.image(colMeans(data.7.train) + pca7_loadings[,i])
+}
+
+par(mfrow=c(1,1))
+title(main="\nSynthetic image of 7s, c= 1", cex.main=1.5)
+```
+
+
+```{r, include=FALSE}
+rbind(c_i[1:4] , c_i[1:4]*-1) %>% kbl() %>% kable_styling(position = "left")
+```
+
+
+
+```{r, include=FALSE, out.width="50%", fig.align = 'center'}
+par(mfrow=c(2,4), omi=rep(0,4), mar=rep(0.2,4), pty="s")
+
+# adding c
+for (i in 1:4){
+digit.image(colMeans(data.7.train) + pca7_loadings[,i]*c_i[i])
+}
+
+# going in the other direction
+for (i in 1:4){
+digit.image(colMeans(data.7.train) + pca7_loadings[,i]*-c_i[i])
+}
+par(mfrow=c(1,1))
+title(main="\nSynthetic image of 7s, c= +/-1SD", cex.main=1.5)
+```
+
+
+```{r, include=FALSE, out.width="50%", fig.align = 'center'}
+par(mfrow=c(2,4), omi=rep(0,4), mar=rep(0.2,4), pty="s")
+
+# two standard deviations away
+for (i in 1:4){
+digit.image(colMeans(data.7.train) + pca7_loadings[,i]*2*c_i[i])
+}
+
+# going in the other direction
+for (i in 1:4){
+digit.image(colMeans(data.7.train) + pca7_loadings[,i]*2*-c_i[i])
+}
+par(mfrow=c(1,1))
+title(main="\nSynthetic image of 7s, c= +/-2SD", cex.main=1.5)
+```
+
+
+```{r, include=FALSE}
+# Using PC1 and 2, identify and display typical images of "7" and atypical images among the observed images
+# in other words, identify outliers of PC1 and 2
+# starting with PC1:
+summary(pca7_scores[,1]) 
+```
+
+```{r, include=F}
+# an atypical image of 7 would occur at the minimum or maximum values (far away from the mean)
+w_min<-which.min(pca7_scores[,1]) #index for the minimum score
+w_max<-which.max(pca7_scores[,1]) #index for the maximum score
+w_mean<-which(round(pca7_scores[,1],0)==0)[5] #index for mean score, chosen random one
+w_med<-which(round(pca7_scores[,1],3)==-0.338) #index for median score
+```
+
+
+
+```{r, include=FALSE, out.width="30%", fig.align = 'center'}
+par(mfrow=c(1,2), omi=rep(0,4), mar=rep(0.2,4), pty="s")
+
+# visualize the "weird" ones
+digit.image(data.7[w_min,]) #min
+digit.image(data.7[w_max,]) #max
+par(mfrow=c(1,1))
+title(main="\nAtypical image of 7s (PC1)", cex.main=2)
+```
+
+
+
+```{r, include=FALSE, out.width="30%", fig.align = 'center'}
+par(mfrow=c(1,2), omi=rep(0,4), mar=rep(0.2,4), pty="s")
+# versus a "normal" one
+digit.image(data.7[w_mean,]) #mean
+digit.image(data.7[w_med,]) #median
+par(mfrow=c(1,1))
+title(main="\nTypical image of 7s (PC1)", cex.main=2)
+```
+
+```{r, include=F}
+rm(w_min, w_max, w_mean, w_med)
+```
+
+```{r, include=F}
+# same for PC2:
+summary(pca7_scores[,2])
+```
+
+```{r, include=F}
+# an atypical image of 7 would occur at the minimum or maximum values (far away from the mean)
+w_min<-which.min(pca7_scores[,2]) #index for the minimum score
+w_max<-which.max(pca7_scores[,2]) #index for the maximum score
+w_mean<-which(round(pca7_scores[,2],0)==0)[5] #index for mean score
+w_med<-which(round(pca7_scores[,2],2)==-0.29) #index for median score
+```
+
+
+```{r, include=FALSE, out.width="30%", fig.align = 'center'}
+par(mfrow=c(1,2), omi=rep(0,4), mar=rep(0.2,4), pty="s")
+
+# visualize the "weird" ones
+digit.image(data.7[w_min,])
+digit.image(data.7[w_max,])
+
+par(mfrow=c(1,1))
+title(main="\nAtypical image of 7s (PC2)", cex.main=2)
+```
+
+
+
+
+```{r, include=FALSE, out.width="30%", fig.align = 'center'}
+par(mfrow=c(1,2), omi=rep(0,4), mar=rep(0.2,4), pty="s")
+
+# versus a "normal" one
+digit.image(data.7[w_mean,]) #mean
+digit.image(data.7[w_med,]) #median
+
+par(mfrow=c(1,1))
+title(main="\nTypical image of 7s (PC2)", cex.main=2)
+```
+
+
+```{r, include=FALSE, out.width="50%", fig.align = 'center'}
+# How many components might be adequate to represent the 256 dimensional data?
+# scree plot
+scree7<-pca7$sdev^2 / sum(pca7$sdev^2)
+plot( scree7 , ylab="Proportion of variance explained", main="Scree plot from PCA on 7s data")
+```
+
+
+
+```{r, echo=FALSE, out.width="80%", fig.align = 'center'}
+# scree plot
+plot( scree7[1:20] , ylab="Proportion of variance explained", 
+      main="Supplementary Figure 1: Scree plot from PCA on 7s data, \nfirst 20 components")
+```
+
+
+
+```{r, echo=FALSE}
+# View the cumulative proportion of variance explained
+# summary(pca7)
+
+# Manually create a truncated summary table
+pca7_summ<-data.frame(Standard_deviation=pca7$sdev, Proportion_of_variance=pca7$sdev^2/sum(pca7$sdev^2),
+           Cumulative_proportion=cumsum(pca7$sdev^2/sum(pca7$sdev^2)))
+
+pca7_summ[1:20,] %>% kbl(caption="Summary of first 20 components from 7s data") %>% kable_styling(latex_options = "HOLD_position")
+```
+
+
+
+```{r, include=F}
+# Carry out a PCA on training data of 400 "7"s in data.7.train
+pca9<-princomp(data.9.train)
+```
+
+```{r, include=F, out.width="30%", fig.align = 'center'}
+# one image of "9"
+# digit.image(data.9.train[1,])
+
+# Visualize the average image of "9"s
+par(mfrow=c(1,1),  pty="s") 
+digit.image(colMeans(data.9.train))
+
+title(main="Synthetic 'average' image of 9", cex.main=3)
+```
+
+
+```{r, include=F}
+# Visualize the synthetic digit images that you could generate along each of the PCA directions
+pca9_scores<-pca9[["scores"]]
+dim(pca9_scores)
+
+# coerce loadings into a dataframe
+dim(pca9$loadings)
+pca9_loadings <- pca9$loadings[,1:256] %>% as.data.frame()
+```
+
+
+```{r, include=FALSE, out.width="30%", fig.align = 'center'}
+# for example, if I am looking at an appropriate c for e1, it should be sqrt(lambda 1)
+c_i <- pca9$sdev
+
+par(mfrow=c(1,1),pty="s")
+
+# original, c=0
+# for (i in 1:4){
+# digit.image(colMeans(data.9.train))
+# }
+
+digit.image(colMeans(data.9.train))
+            
+title(main="'Average' image of 9, c=0", cex.main=2)
+```
+
+
+```{r, include=FALSE, out.width="50%", fig.align = 'center'}
+par(mfrow=c(2,4), omi=rep(0,4), mar=rep(0.2,4), pty="s")
+
+# adding c
+for (i in 1:4){
+digit.image(colMeans(data.9.train) + pca9_loadings[,i]*c_i[i])
+}
+
+# going in the other direction
+for (i in 1:4){
+digit.image(colMeans(data.9.train) + pca9_loadings[,i]*-c_i[i])
+}
+
+par(mfrow=c(1,1))
+title(main="\nSynthetic image of 9s, c=+/-1SD", cex.main=1.5)
+```
+
+
+```{r, include=FALSE, out.width="50%", fig.align = 'center'}
+par(mfrow=c(2,4), omi=rep(0,4), mar=rep(0.2,4), pty="s")
+
+# two standard deviations away
+for (i in 1:4){
+digit.image(colMeans(data.9.train) + pca9_loadings[,i]*2*c_i[i])
+}
+
+# going in the other direction
+for (i in 1:4){
+digit.image(colMeans(data.9.train) + pca9_loadings[,i]*2*-c_i[i])
+}
+
+par(mfrow=c(1,1))
+title(main="\nSynthetic image of 9s, c= +/-2SD", cex.main=1.5)
+```
+
+
+```{r, include=FALSE}
+# Using PC1 and 2, identify and display typical images of "9" and atypical images among the observed images
+# in other words, identify outliers of PC1 and 2
+# starting with PC1:
+summary(pca9_scores[,1]) 
+```
+
+```{r, include=F}
+# an atypical image of 9 would occur at the minimum or maximum values (far away from the mean)
+w_min<-which.min(pca9_scores[,1]) #index for the minimum score
+w_max<-which.max(pca9_scores[,1]) #index for the maximum score
+w_mean<-which(round(pca9_scores[,1],0)==0)[5] #index for mean score, chosen random one
+w_med<-which(round(pca9_scores[,1],2)==0.7) #index for median score
+```
+
+
+```{r, include=FALSE, out.width="30%", fig.align = 'center'}
+par(mfrow=c(1,2), omi=rep(0,4), mar=rep(0.2,4), pty="s")
+
+# visualize the "weird" ones
+digit.image(data.9[w_min,]) #min
+digit.image(data.9[w_max,]) #max
+par(mfrow=c(1,1))
+title(main="\nAtypical image of 9s (PC1)", cex.main=2)
+```
+
+
+
+```{r, include=FALSE, out.width="30%", fig.align = 'center'}
+par(mfrow=c(1,2), omi=rep(0,4), mar=rep(0.2,4), pty="s")
+# versus a "normal" one
+digit.image(data.9[w_mean,]) #mean
+digit.image(data.9[w_med,]) #median
+par(mfrow=c(1,1))
+title(main="\nTypical image of 9s (PC1)", cex.main=2)
+```
+
+```{r, include=F}
+rm(w_min, w_max, w_mean, w_med)
+```
+
+```{r, include=F}
+# same for PC2:
+summary(pca9_scores[,2])
+```
+
+```{r, include=F}
+# an atypical image of 9 would occur at the minimum or maximum values (far away from the mean)
+w_min<-which.min(pca9_scores[,2]) #index for the minimum score
+w_max<-which.max(pca9_scores[,2]) #index for the maximum score
+w_mean<-which(round(pca9_scores[,2],0)==0)[5] #index for mean score
+w_med<-which(round(pca9_scores[,2],2)==-0.55)[2] #index for median score
+```
+
+
+
+```{r, include=FALSE, out.width="30%", fig.align = 'center'}
+par(mfrow=c(1,2), omi=rep(0,4), mar=rep(0.2,4), pty="s")
+
+# visualize the "weird" ones
+digit.image(data.9[w_min,])
+digit.image(data.9[w_max,])
+
+par(mfrow=c(1,1))
+title(main="\nAtypical image of 9s (PC2)", cex.main=2)
+```
+
+
+
+
+```{r, include=FALSE, out.width="30%", fig.align = 'center'}
+par(mfrow=c(1,2), omi=rep(0,4), mar=rep(0.2,4), pty="s")
+
+# versus a "normal" one
+digit.image(data.9[w_mean,]) #mean
+digit.image(data.9[w_med,]) #median
+
+par(mfrow=c(1,1))
+title(main="\nTypical image of 9s (PC2)", cex.main=2)
+```
+
+
+```{r, include=FALSE, out.width="50%", fig.align = 'center'}
+# How many components might be adequate to represent the 256 dimensional data?
+# scree plot
+
+scree9<-pca9$sdev^2 / sum(pca9$sdev^2)
+
+plot( scree9 , ylab="Proportion of variance explained", main="Scree plot of PCA on 9s data")
+```
+
+
+```{r, echo=FALSE, out.width="80%", fig.align = 'center'}
+# scree plot
+plot( scree9[1:20] , ylab="Proportion of variance explained", 
+      main="Supplementary Figure 2: Scree plot of PCA on 9s data,\nfirst 20 components")
+```
+
+```{r, echo=FALSE}
+# View the cumulative proportion of variance explained
+# summary(pca9)
+
+# Manually create a truncated summary table
+pca9_summ<-data.frame(Standard_deviation=pca9$sdev, Proportion_of_variance=pca9$sdev^2/sum(pca9$sdev^2),
+           Cumulative_proportion=cumsum(pca9$sdev^2/sum(pca9$sdev^2)))
+
+pca9_summ[1:20,] %>% kbl(caption="Summary of first 20 components from 9s data") %>% kable_styling(latex_options = "HOLD_position")
+```
+
+
+```{r, include=F}
+# Carry out a PCA on the combined training data of 400 "7" and 400 "9" in data.train
+pca79<-princomp(data.train)
+```
+
+
+```{r, include=FALSE, out.width="50%", fig.align = 'center'}
+# Define the first two PCs
+pca79_scores<-pca79$scores
+# plot(x=pca79_scores[,1], pca79_scores[,2])
+pca79_loadings12<-pca79$loadings[,1:2] %>% as.data.frame()
+
+hist(pca79_loadings12$Comp.1, 50, main="Distribution of eigenvector \ncoefficients for PC1", xlab="")
+hist(pca79_loadings12$Comp.2, 50, main="Distribution of eigenvector \ncoefficients for PC2", xlab="")
+```
+
+
+
+```{r, include=FALSE}
+# Generate a plot of mean-centered PC scores using the first two PCs and label each point as the corresponding digit (1 or 2?)
+# Just verify that it's "mean centered" as it is
+pca79$scores[1:5]
+(( data.train[1,] - pca79$center )%*% pca79$loadings )[1:5]
+```
+
+```{r, include=FALSE, out.width="50%", fig.align = 'center'}
+# plot itself
+# labels: row index 1:400 is "7" 401:800 is "
+mycolors<-ifelse(label.train==7, "red", "blue")
+
+plot(x=pca79_scores[,1], pca79_scores[,2],col=mycolors, pch=19, cex=1.2, 
+     main="Mean-centered PC scores", xlab="PC1", ylab="PC2")
+legend(x="bottomleft", legend=c("7", "9"),fill=c("red", "blue"))
+```
+
+```{r, include=FALSE}
+# LDA  -----------------------
+col.sd <- apply(data.train, 2, sd)  # compute columnwise standard deviation
+sum(col.sd==0)   # 18 variables with zero SD!
+
+summary(col.sd)
+
+# values that are ALMOST equal to zero (anything from 0.01 to 0.04)
+# table( round(col.sd, 1)==0 )
+
+# subset on variables with sd >0
+# sdzero<-which(col.sd==0)
+# data.train_sub<-data.train[,! (colnames(data.train) %in% names(sdzero))]
+```
+
+```{r, include=FALSE, out.width="50%", fig.align = 'center'}
+# Is there some more stringent cutoff we could use for sd?
+
+# plot(x=colMeans(data.train), y=col.sd)
+smoothScatter(x=colMeans(data.train), y=col.sd, 
+              xlab="Mean", ylab="Standard deviation",
+              main="Mean vs. standard deviation")
+abline(h=0.1, col=2)
+```
+
+
+
+```{r, include=F}
+idx_sdcutoff <- (1:256)[col.sd>0.1]  # this contains the indices of variables with SD > cutoff
+data.train[,idx_sdcutoff] %>% dim()
+label.train.factor<-as.factor(label.train) #convert into factors just incase
+
+
+lda79 <- lda(x=data.train[,idx_sdcutoff], grouping=label.train.factor) # lda(x, grouping)
+
+LD1 <- rep(0,256) #the variables we filtered out are filled with "0"s
+LD1[idx_sdcutoff] <- lda79$scaling   # linear discriminant coefficients as a 256 dim vector
+```
+
+
+
+```{r, include=FALSE, out.width="30%", fig.align = 'center'}
+par(pty="s")
+# digit.image(LD1) # visualize the raw LD coefficients
+digit.image(abs(LD1)) # visualize the absolute values of the LD coefficients
+
+par(mfrow=c(1,1))
+title(main="Synthetic image of abs. val\n of LD coefficients", cex.main=2)
+```
+
+
+
+
+```{r, include=FALSE, out.width="50%", fig.align = 'center'}
+plot(pca79_loadings12$Comp.1[idx_sdcutoff], LD1[idx_sdcutoff], 
+     xlab="PC1 scores", ylab="LD scores",
+     main="PC1 vs LD scores")
+# hist(LD1[idx_sdcutoff], breaks=50)
+```
+
+
+```{r, echo=FALSE}
+lda79_pred<-stats::predict(lda79, newdata=data.train[,idx_sdcutoff])
+
+# table(label.train.factor)
+# table(lda79_pred$class)
+confusion79<-rbind( table(lda79_pred$class[label.train.factor=="7"]),
+       table(lda79_pred$class[label.train.factor=="9"]) )
+rownames(confusion79)<-c("Actual 7","Actual 9")
+colnames(confusion79)<-c("Predicted 7","Predicted 9")
+confusion79%>% kbl(caption="Confusion matrix for APER (LDA done on orig. variables)")  %>% kable_styling(latex_options = "HOLD_position")
+```
+
+```{r, include=FALSE}
+# sum of misclassifications / sum of total number of predictions
+aper_rate<-(confusion79[1,2]+confusion79[2,1])/sum(confusion79)
+```
+
+
+```{r, echo=FALSE}
+set.seed(123)
+lda79_loo<-lda(x=data.train[,idx_sdcutoff],grouping=label.train.factor, CV=T)
+# lda79_loo$class
+confusion79_loo<-rbind( table(lda79_loo$class[label.train.factor=="7"]),
+       table(lda79_loo$class[label.train.factor=="9"]) )
+rownames(confusion79_loo)<-c("Actual 7","Actual 9")
+colnames(confusion79_loo)<-c("Predicted 7","Predicted 9")
+confusion79_loo%>% kbl(caption="Confusion matrix for LOO CV (LDA done on orig. variables)") %>% kable_styling(latex_options = "HOLD_position")
+```
+
+
+```{r, include=F}
+sum(label.train!=lda79_loo$class)
+loo_rate<-mean(label.train!=lda79_loo$class)
+```
+
+
+```{r, echo=FALSE}
+# first I gotta use the testing data to predict
+lda79_test_pred<-stats::predict(lda79, newdata=data.test[,idx_sdcutoff])
+
+# label.train.factor<-as.factor(label.train)
+# table(label.train.factor)
+# table(lda79_pred$class)
+confusion79_test<-rbind( table(lda79_test_pred$class[label.train.factor=="7"]),
+       table(lda79_test_pred$class[label.train.factor=="9"]) )
+rownames(confusion79_test)<-c("Actual 7","Actual 9")
+colnames(confusion79_test)<-c("Predicted 7","Predicted 9")
+confusion79_test%>% kbl(caption="Confusion matrix for testing (LDA done on orig. variables)")  %>% kable_styling(latex_options = "HOLD_position")
+```
+
+
+```{r, include=F}
+# sum of misclassifications / sum of total number of predictions
+test_rate<-(confusion79_test[1,2]+confusion79_test[2,1])/sum(confusion79_test)
+```
+
+
+```{r, include=F}
+pca79_scores12<-as.data.frame(pca79_scores[,1:2])
+
+# lda79_pc<-lda(label.train ~ Comp.1+Comp.2, data=pca79_scores12)
+
+lda79_pc<-lda(x=pca79_scores12, grouping=label.train.factor, data=pca79_scores12)
+
+lda79_pc
+```
+
+```{r, echo=FALSE}
+# apparent error rate
+lda79_pc_pred<-stats::predict(lda79_pc, newdata=pca79_scores12)
+# lda79_pc_pred$class
+confusion79_pc<-rbind( table(lda79_pc_pred$class[label.train.factor=="7"]),
+       table(lda79_pc_pred$class[label.train.factor=="9"]) )
+rownames(confusion79_pc)<-c("Actual 7","Actual 9")
+colnames(confusion79_pc)<-c("Predicted 7","Predicted 9")
+confusion79_pc%>% kbl(caption="Confusion matrix for APER (LDA done on PCs)") %>% kable_styling(latex_options = "HOLD_position")
+```
+
+```{r, include=F}
+# sum of misclassifications / sum of total number of predictions
+pc_aper_rate<-(confusion79_pc[1,2]+confusion79_pc[2,1])/sum(confusion79_pc)
+```
+
+
+```{r, echo=FALSE}
+# LOO error rate
+set.seed(123)
+lda79_pc_loo<-lda(x=pca79_scores12, grouping=label.train.factor, CV=T)
+# lda79_pc_loo$class
+confusion79_pc_loo<-rbind( table(lda79_pc_loo$class[label.train.factor=="7"]),
+       table(lda79_pc_loo$class[label.train.factor=="9"]) )
+rownames(confusion79_pc_loo)<-c("Actual 7","Actual 9")
+colnames(confusion79_pc_loo)<-c("Predicted 7","Predicted 9")
+confusion79_pc_loo %>% kbl(caption="Confusion matrix for LOOCV (LDA done on PCs)")  %>% kable_styling(latex_options = "HOLD_position")
+```
+
+```{r, include=F}
+sum(label.train!=lda79_pc_loo$class)
+pc_loo_rate<-mean(label.train!=lda79_pc_loo$class)
+```
+
+```{r, include=F}
+testpcascores<-stats::predict(pca79, newdata = data.test)
+testpcascores12<-as.data.frame(testpcascores[,1:2])
+
+# test error rate
+# first I gotta use the testing data to predict
+lda79_pc_pred<-stats::predict(lda79_pc, newdata=testpcascores12)
+```
+
+
+```{r, echo=FALSE}
+# label.train.factor<-as.factor(label.train)
+# table(label.train.factor)
+# table(lda79_pred$class)
+confusion79_pc_test<-rbind( table(lda79_pc_pred$class[label.train.factor=="7"]),
+       table(lda79_pc_pred$class[label.train.factor=="9"]) )
+rownames(confusion79_pc_test)<-c("Actual 7","Actual 9")
+colnames(confusion79_pc_test)<-c("Predicted 7","Predicted 9")
+confusion79_pc_test %>% kbl(caption="Confusion matrix for testing (LDA done on PCs)")  %>% kable_styling(latex_options = "HOLD_position")
+```
+
+
+```{r, include=F}
+# sum of misclassifications / sum of total number of predictions
+pc_test_rate<-(confusion79_pc_test[1,2]+confusion79_pc_test[2,1])/sum(confusion79_pc_test)
+```
+
+
+```{r, include=FALSE}
+yee<-cbind(aper_rate, loo_rate,  round(test_rate,3)) 
+haw<-cbind(pc_aper_rate, pc_loo_rate, round(pc_test_rate, 3))
+
+yeehaw<-rbind(yee, haw)
+
+colnames(yeehaw)<-c("Apparent error", "LOO CV error", "Test error")
+rownames(yeehaw)<-c("LDA on orig. variables", "LDA on PC1&2 scores")
+yeehaw %>% kbl(caption="Summary of error rates")  %>% kable_styling(latex_options = "HOLD_position")
+```
+
+
+
+```{r, include=F}
+# scree plot
+scree79<-pca79$sdev^2 / sum(pca79$sdev^2)
+
+plot( scree79 , ylab="Proportion of variance explained", main="Scree plot from PCA on 7s and 9s data")
+
+# Manually create a truncated summary table
+pca79_summ<-data.frame(Standard_deviation=pca79$sdev, Proportion_of_variance=pca9$sdev^2/sum(pca79$sdev^2),
+           Cumulative_proportion=cumsum(pca79$sdev^2/sum(pca79$sdev^2)))
+
+pca79_summ[1:20,] %>% gt() %>% tab_header(  title = "S&P 500")
+```
+
+
+
+```{r, include=FALSE, eval=FALSE}
+# code for plotting a 3D plot
+rgl::plot3d(x=pca79_scores[,1], y=pca79_scores[,2], z= pca79_scores[,3], col=label.train.factor,
+       type = 's', radius = 0.5,
+       xlab="PC 1", ylab="PC 2", zlab="PC 3")
+```
+
+
+```{r, echo=F}
+# View the cumulative proportion of variance explained
+# summary(pca9)
+
+# Manually create a truncated summary table
+pca79_summ<-data.frame(Standard_deviation=pca79$sdev, Proportion_of_variance=pca79$sdev^2/sum(pca79$sdev^2),
+           Cumulative_proportion=cumsum(pca79$sdev^2/sum(pca79$sdev^2)))
+
+pca79_summ[1:20,] %>% kbl(caption="Summary of first 20 components from 7s and 9s data") %>% kable_styling(latex_options = "HOLD_position")
+```
